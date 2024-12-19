@@ -14,9 +14,9 @@ public class SimplePluginOpportunity : IPlugin
         try
         {
             // Prevent infinite loop by checking depth
-            if (context.Depth > 1)
+            if (context.MessageName == "Update" && context.Depth > 1)
             {
-                tracingService.Trace("Plugin execution skipped due to depth check.");
+                tracingService.Trace("Plugin execution skipped due to depth check on Update message .");
                 return;
             }
 
