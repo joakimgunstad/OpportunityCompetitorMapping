@@ -1,43 +1,85 @@
-﻿using Microsoft.Xrm.Sdk;
-using Microsoft.Xrm.Sdk.Query;
+using Microsoft.Xrm.Sdk;
 using System;
 
-public class OpportunityCompetitorMapping : IPlugin
+public class SimplePluginOpportunity : IPlugin
 {
     public void Execute(IServiceProvider serviceProvider)
     {
-        // Obtain the execution context.
+        // Obtain services from the service provider
+        ITracingService tracingService = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
         IPluginExecutionContext context = (IPluginExecutionContext)serviceProvider.GetService(typeof(IPluginExecutionContext));
 
-        // Check if the target entity is Opportunity.
-        if (context.InputParameters.Contains("Target") && context.InputParameters["Target"] is Entity)
+        tracingService.Trace("Plugin execution started.");
+
+        try
         {
-            var targetEntity = (Entity)context.InputParameters["Target"];
-
-            // Ensure the sb1_existingbankconnection field is modified.
-            if (targetEntity.Contains("sb1_existingbankconnection"))
+            // Prevent infinite loop by checking depth
+            if (context.Depth > 1)
             {
-                // Obtain services.
-                var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
-                var service = serviceFactory.CreateOrganizationService(context.UserId);
+                tracingService.Trace("Plugin execution skipped due to depth check.");
+                return;
+            }
 
-                // Obtain tracing service for debugging
-                ITracingService tracingService = (ITracingService)serviceProvider.GetService(typeof(ITracingService));
+            // Validate the target entity
+            if (context.InputParameters.Contains("Target") && context.InputParameters["Target"] is Entity targetEntity)
+            {
+                tracingService.Trace("Target entity is valid.");
 
-                // Check if the lookup has a value.
-                var competitorRef = targetEntity.GetAttributeValue<EntityReference>("sb1_existingbankconnection");
-                if (competitorRef != null)
+                // Check if the specific lookup field 'sopra_existingbankconnection' is modified
+                if (targetEntity.Contains("sopra_existingbankconnection"))
                 {
-                    // Fetch the Competitor record with only the "name" field
-                    var competitor = service.Retrieve(competitorRef.LogicalName, competitorRef.Id, new ColumnSet("name"));
+                    tracingService.Trace("Field 'sopra_existingbankconnection' is modified.");
 
-                    // Log the fetched name for debugging purposes (optional)
-                    var competitorName = competitor.GetAttributeValue<string>("name");
-                    tracingService.Trace($"Competitor retrieved: {competitorName}");
+                    // Retrieve the lookup value
+                    var competitorRef = targetEntity.GetAttributeValue<EntityReference>("sopra_existingbankconnection");
 
-                    // No additional logic is required if the subgrid is configured to filter automatically based on the lookup.
+                    if (competitorRef != null)
+                    {
+                        tracingService.Trace($"Retrieved competitor reference: ID = {competitorRef.Id}, LogicalName = {competitorRef.LogicalName}");
+
+                        // Obtain the organization service
+                        var serviceFactory = (IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory));
+                        var service = serviceFactory.CreateOrganizationService(context.UserId);
+
+                        // Associate the competitor with the opportunity
+                        tracingService.Trace("Associating the Competitor with the Opportunity using N:N relationship.");
+
+                        // Use the correct relationship schema name
+                        string relationshipName = "opportunitycompetitors_association";
+
+                        // Prepare the related entities to associate
+                        EntityReferenceCollection relatedEntities = new EntityReferenceCollection
+                        {
+                            competitorRef
+                        };
+
+                        // Perform the association
+                        Relationship relationship = new Relationship(relationshipName);
+                        service.Associate(targetEntity.LogicalName, targetEntity.Id, relationship, relatedEntities);
+
+                        tracingService.Trace("Association completed successfully.");
+                    }
+                    else
+                    {
+                        tracingService.Trace("Field 'sopra_existingbankconnection' does not have a value.");
+                    }
+                }
+                else
+                {
+                    tracingService.Trace("Field 'sopra_existingbankconnection' is not modified.");
                 }
             }
+            else
+            {
+                tracingService.Trace("Target entity is not valid or does not contain the expected fields.");
+            }
         }
+        catch (Exception ex)
+        {
+            tracingService.Trace($"An error occurred: {ex.Message}");
+            throw new InvalidPluginExecutionException("An error occurred in the SimplePluginOpportunity plugin.", ex);
+        }
+
+        tracingService.Trace("Plugin execution completed.");
     }
 }
