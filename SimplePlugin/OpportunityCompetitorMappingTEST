@@ -1,5 +1,6 @@
 using Microsoft.Xrm.Sdk;
 using System;
+using System.Security.Principal;
 
 public class OpportunityCompetitorMapping : IPlugin
 {
@@ -66,6 +67,15 @@ public class OpportunityCompetitorMapping : IPlugin
                         service.Associate(targetEntity.LogicalName, targetEntity.Id, relationship, relatedEntities);
 
                         tracingService.Trace("Association completed successfully.");
+
+                        // === FORCING OPPORTUNITY FORM REFRESH ===
+                        tracingService.Trace("Forcing an update on the Opportunity to trigger UI refresh.");
+
+                        Entity opportunityUpdate = new Entity(targetEntity.LogicalName, targetEntity.Id);
+                        opportunityUpdate["sopra_pluginupdatehidden"] = "OK"; // Use a hidden dummy field
+                        service.Update(opportunityUpdate);
+
+                        tracingService.Trace("Opportunity form refresh triggered via dummy field update.");
                     }
                     else
                     {
